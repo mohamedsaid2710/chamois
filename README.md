@@ -1,157 +1,200 @@
+# Chamois
 
-Chamois is a Python application that aims to make state-of-the-art eye-tracking experiments on reading behavior as easy as possible.  The focus is on stimulus presentation and recording of user responses.  Chamois doesn’t support any particular eye-tracker but is designed to be used with any eye-tracker that has a Python API.  A demo experiment for TRACKPixx3 trackers is linked below.  Using PyGaze most other eye-trackers could be used as well.
+Chamois is a Python application that aims to make state-of-the-art
+eye-tracking experiments on reading behavior as easy as possible. The focus
+is on stimulus presentation and recording of user responses. It is written
+in [Pyglet](https://pyglet.org); the engine (`chamois.py`) doesn't depend on
+any particular eye-tracker, and full support for VPixx TRACKPixx3/DATAPixx3
+trackers is included (`TPx.py`). The page model, Latin-square
+counterbalancing and session-log format are those of the earlier
+FreeSimpleGUI version, so existing analysis code keeps working.
 
 **Status:** Chamois is work in progress.  I wrote it for my own lab and share it without any warranty.  It seems to work pretty well, but definitely has some rough edges.  If you’re interested in using it, feel free to contact me to discuss it.
 
-**Key features:**
-- Chamois is inspired by [Ibex](https://github.com/addrummond/ibex): Configuration and data format are similar but simpler.
-- Implements most of the usual best-practices, so that users don’t have to reinvent the wheel.  E.g:
-  - Blinking fixation target at the beginning of a trial.
-  - Trial ends when participant looks at lower-right corner of screen.
-- Sanity checking of stimuli and support for Latin square designs.  Chamois automatically picks the most underrepresented list.
-- Chamois is eye-tracker agnostic and can be combined with almost any eye-tracking system via [PyGaze](https://www.pygaze.org/) or manufacturer APIs such as pylink and pypixx.
-- Runs on Linux, MacOS, and Windows.  Only dependency is [FreeSimpleGui](https://github.com/spyoungtech/FreeSimpleGUI).
-- With only a small amount of code, Chamois is relatively easy to hack and extend even for users with only limited Python knowledge.
+**What changed compared to the FreeSimpleGUI version:**
+- **Pyglet** instead of FreeSimpleGUI: one fullscreen window with an
+  offscreen framebuffer, no other GUI toolkit.
+- **Layout in height units:** font size, spacing, margins and text position
+  are fractions of the screen height (1.0 = full height), so an experiment
+  looks the same on any screen and resolution.
+- **Data in pixels:** word AOIs and gaze samples are saved in screen pixels,
+  origin top left, y down (as in the FreeSimpleGUI version and in the
+  screenshots). AOIs and gaze can therefore be compared directly; the screen
+  resolution is logged with every row.
+- **TRACKPixx3 gaze follower:** real-time gaze markers on the experimenter's
+  console monitor while the participant's display stays clean (DATAPixx3 M16
+  mode); condition codes stamped into every eye sample; mid-session
+  recalibration.
+- **Dry run:** without a DATAPixx3 the same script runs as a plain reading
+  experiment (keyboard-driven, no eye-tracking), so it replaces the
+  separate `demo_experiment.py`.
 
-**A non-feature:** Chamois was not designed for timing-sensitive experiments, e.g. those using the boundary paradigm.  Eye-movement contingent display-changes could be implemented but may be too slow to be executed during saccades.
+**Key features:** blinking fixation target at trial
+start; trial ends when the participant looks at the lower-right corner;
+sanity checks of stimuli (words that would not fit stop the experiment
+before it starts); Latin square designs with automatic choice of the most
+underrepresented list.
 
-# Demo experiment
+**A non-feature:** not designed for timing-sensitive display changes (e.g.
+the boundary paradigm).
 
-Below is the code for a very simple experiment with 3 items, 2 conditions, 2 fillers, but no practice sentences.
+## Files
 
-Two slightly more elaborate examples:
-- [demo_experiment.py](https://github.com/tmalsburg/chamois/blob/main/demo_experiment.py): As below but with practice sentences.
-- [demo_experiment_tpx.py](https://github.com/tmalsburg/chamois/blob/main/demo_experiment_tpx.py): As below but with practice sentences and recording of eye movement using a [TRACKPixx3](https://vpixx.com/products/trackpixx/) eye-tracker.  Note how the code for this experiment differs only minimally from the code for an experiment without eye-tracker.
+| File | What it is for |
+| :--- | :--- |
+| `demo_experiment_tpx.py` | The experiment: stimuli, page sequence, layout settings. **The file you run.** |
+| `chamois.py` | The engine: pages, window, layout, session log, Latin square. Knows nothing about eye trackers. |
+| `TPx.py` | The TRACKPixx3/DATAPixx3 layer: gaze recording and markers, condition codes, recalibration, dry run. |
+| `setup_once.py` | One-time installer: uv, the dependencies, and VPixx's `pypixxlib`. |
+| `aoi_check.py` | Analysis check: draws each trial's AOIs and gaze samples over its screenshot. |
+| `pyproject.toml`, `uv.lock`, `.python-version` | Dependency and Python version pinning. |
+| `images/` | Screenshots for this README. |
+
+## Running
+
+```bash
+python3 setup_once.py              # once per machine (needs internet)
+uv run demo_experiment_tpx.py      # every run after that
+```
+
+`pypixxlib` is proprietary VPixx software and not on PyPI; `setup_once.py`
+downloads it from the [official VPixx site](https://docs.vpixx.com/download)
+into `vendor/`. A lab machine kept offline after setup needs
+`offline = true` in uv's config (`setup_once.py` explains this at the end).
+Developed and tested on Linux with X11.
+
+Calibrate the TRACKPixx3 in LabMaestro first, then run the script.
 
 ## Stimuli
 
-Stimuli can be loaded from `.tsv` files (via `load_stimuli(…)`) or be defined directly in Python.
+Targets come from `stimuli.tsv`, fillers from `fillers.tsv` (in the folder
+you run from; four tab-separated columns, no header: item, condition, sentence,
+question). A literal `\n` in a sentence starts a new line on screen. Without
+the files, small built-in stimuli are used.
 
-``` python
-target_sentences = [
-  [1, "a", "While Bill hunted the deer was hunted by Bill.", "Did Bill hunt the deer?"],
-  [1, "b", "While Bill hunted the deer that was brown and nimble was hunted by Bill.", "Did Bill hunt the deer?"],
-  [2, "a", "While Mary bathed the baby bathed Mary.", "Did Mary bath the baby?"],
-  [2, "b", "While Mary bathed the baby that was small and cute bathed Mary.", "Did Mary bath the baby?"],
-  [3, "a", "Anna scolded the chef of the aristocrats who was routinely letting food go to waste.", "Did food go to waste?"],
-  [3, "b", "Anna studied with the chef of the aristocrats who was routinely letting food go to waste.", "Did food go to waste?"],
-]
-
-fillers = [
-  [20, "filler", "Colorless green ideas sleep furiously.", "Does this sentence make any sense at all?"],
-  [21, "filler", "No head injury is too trivial to be ignored.", "Did that sentence make your brain hurt?"],
-]
-
-# Select most underrepresented Latin square list:
-stimuli = next_latin_square_list(target_sentences)
-
-# Mix with fillers and shuffle :
-stimuli += fillers
-random.shuffle(stimuli)
+```text
+1	a	While Bill hunted the deer was hunted by Bill.	Did Bill hunt the deer?
+1	b	While Bill hunted the deer that was brown and nimble\nwas hunted by Bill.	Did Bill hunt the deer?
 ```
 
 ## Experiment structure
 
-An experiment consists of a series of “pages” that are displayed one by one.  Each page produces one line in the results file.  Various types of pages are predefined (reading trials, acceptability judgment trials), but it’s really easy to add new types of pages.
+An experiment is a list of pages shown one by one; each page is one row in
+the session log. `build_pages()` in `demo_experiment_tpx.py` has the
+complete version; in short:
 
-``` python
-# Load Chamois:
-exec(open("chamois.py").read())
+```python
+stimuli = chamois.next_latin_square_list(target_sentences) + fillers
+random.shuffle(stimuli)
 
-# Set the visual theme:
-theme('Black')
-font = "Courier"
-fontsize = 22
-wordspacing = 18
-
-# Structure of experiment:
-pages = []
-
-# Welcome screen:
-pages.append(
-  CenteredInstructions("Welcome to this study!"))
-
-# Asks user to enter subject ID:
-pages.append(SubjectIDPage())
-
-# Experimental trials with comprehension question after 50% of the
-# sentences:
+pages = [chamois.SubjectIDPage(),
+         chamois.CenteredInstructions("Welcome to this study!")]
 for item, condition, sentence, question in stimuli:
-  pages.append(ReadingTrial(item, condition, sentence))
-  if random.choice([True, False]):
-    pages.append(YesNoQuestionTrial(item, condition, question))
-
-# Thank-you screen:
-pages.append(
-  CenteredInstructions("Thank you for your participation!"))
-
-# Run experiment:
-run_experiment(pages)
+    pages.append(TPx.TPxReadingTrial(item, condition, sentence))
+    if random.choice([True, False]):
+        pages.append(chamois.YesNoQuestionTrial(item, condition, question))
+    pages.append(chamois.Next())
+pages.append(chamois.CenteredInstructions("Thank you for your participation!"))
 ```
 
-## Screenshots
+Page types: `CenteredInstructions`, `SubjectIDPage`, `TPxReadingTrial`,
+`Next` (break) and two kinds of comprehension question:
+`YesNoQuestionTrial` (answered with f/j, logged as `yes`/`no`) and
+`ComprehensionTrial` (typed answer, confirmed with Enter, logged as typed).
+The demo uses yes/no questions; for typed answers replace
+`chamois.YesNoQuestionTrial` with `chamois.ComprehensionTrial`, or mix both.
+New types: subclass `chamois.Page`.
 
-![Screenshot 1](images/screenshot_1.png)
+## Settings
 
-![Screenshot 2](images/screenshot_2.png)
+These are safe to change. Sizes are in **height units**: fractions of the
+screen height, e.g. 0.03 = 3 % (≈ 32 px on a 1080p screen).
 
-![Screenshot 3](images/screenshot_3.png)
+| Setting | Default | What it does |
+| :--- | :--- | :--- |
+| **`demo_experiment_tpx.py`** | | |
+| `STIMULI_BASE`, `FILLERS_BASE` | `"stimuli"`, `"fillers"` | Names of the stimulus files (`.tsv` or `.csv`). |
+| `Y_OFFSET` | `0.0` (height units) | Vertical position of the text block's center; 0 = screen center, positive = higher. |
+| `ALIGN` | `'left'` | Line alignment: `'left'`, `'center'` or `'right'`. |
+| `CROSS_POSITION` | `'left'` | Fixation cross: `'left'` (just before the first word), `'center'` (middle of the text block) or `'right'` (after the first line). |
+| `WRAP_WIDTH` | `None` | Automatic line breaks after about this many characters; `None` = off. Manual `\n` breaks are always kept. |
+| `WRAP_PRACTICE`, `WRAP_TARGETS`, `WRAP_FILLERS` | `False`, `False`, `True` | Which stimulus groups get automatic line breaks. |
+| `practice_sentences` | 2 items | The practice items shown before the experiment. |
+| **`chamois.py`** | | |
+| `FONT_NAME` | Courier, … | Font; the first one installed is used. A monospaced font keeps `WRAP_WIDTH` exact. |
+| `FONTSIZE` | `0.03` (height units) | Font size. |
+| `WORDSPACING` | `0.02` (height units) | Gap between words. |
+| `LINESPACING` | `0.04` (height units) | Extra space above and below each line. |
+| `LEFT_MARGIN` | `0.08` (height units) | Distance of left/right-aligned text from the screen edge (leaves room for a left cross). |
+| `BACKGROUND_COLOR`, `TEXT_COLOR`, `HINT_COLOR` | light gray, black, dark gray | Screen colors as (R, G, B). With the DATAPixx3 only grays work (R = G = B, not 100–103); checked at startup. |
+| `LINE_DOT_COLOR` | red | Center dot of the fixation cross. |
+| `SCREEN_NUMBER` | `0` | Which monitor shows the experiment. |
+| `CONTINUE_TEXT`, `YESNO_HINT`, `ANSWER_HINT`, `SUBJECT_ID_PROMPT` | English | Texts the participant sees; edit to translate. |
+| **`TPx.py`** | | |
+| `TRIGGER_RADIUS` | `0.19` (height units) | Size of the lower-right region that ends a reading trial when looked at. |
+| `TRIGGER_DWELL` | `0.08` | Seconds the gaze must stay in that region, so a passing saccade doesn't end the trial. |
+| `GAZE_DISPLAY` | `'console'` | Where live gaze markers appear: `'console'` (experimenter only), `'stimulus'` (participant sees them too, in gray) or `'both'`. |
+| `GAZE_MARKER` | `'eyes'` | `'eyes'`: one marker per eye (cyan left, magenta right); `'average'`: one marker at the mean of both eyes. Both eyes are always recorded. |
+| `MARKER_RADIUS` | `0.01` (height units) | Size of the gaze markers. |
+| `STIMULUS_MARKER_GRAY` | `180` | Brightness of participant-visible markers (not 100–103). |
+| `SHOW_EYE_IMAGE` | `False` | Keep the DATAPixx3's live eye camera image on the console during trials. |
+| `SHOW_DRY_RUN_TAG` | `False` | Dry run only: show the trial's condition code top left, for debugging. |
 
-![Screenshot 4](images/screenshot_4.png)
-
-![Screenshot 5](images/screenshot_5.png)
-
-![Screenshot 6](images/screenshot_6.png)
+Everything else (video modes, CLUT indices, shader) belongs to the hardware
+setup and should stay as it is.
 
 ## Session log
 
-The log of the session comes in tab-separated values format (`.tsv`) and, among other things, includes the AOIs of the individual words.  Screenshots of the stimuli are stored on disk.  All filenames belonging to a session start with the session ID which is composed of the date and time at which the experiment was started, e.g. `20240912_082813`.
+All data goes to `data/`: `logs/`, `screenshots/` and `eyetracking/`. Every
+filename starts with participant ID, date/time and Latin-square list, e.g.
+`07_2026-07-14_14-59-59_list-a`. The session log (`data/logs/<prefix>_log.tsv`)
+has one row per page:
 
-Results in table format:
+1. `pno`: page number.
+2. `type`: page type.
+3. `starttime`, 4. `endtime`: seconds since the start of the experiment.
+5. `item`, 6. `condition`: of the displayed stimulus.
+7. `stimulus`: the displayed text.
+8. `response`: the answer, the participant ID, `ABORTED` or `RECALIBRATED`.
+9. `screenshot`: the page's screenshot in `data/screenshots/`.
+10. `metadata1`: for reading trials, one AOI per word as
+    `left,top,right,bottom` in pixels (origin top left, y down).
+11. `metadata2`: for reading trials, the eye-tracking file in
+    `data/eyetracking/` (gaze in the same pixel coordinates; `32767` = eye
+    lost).
+12. `screen_width`, 13. `screen_height`: the screen resolution in pixels.
 
-| pno | type                 | starttime | endtime | item | condition | stimulus                                                                                  | response  | screenshot                                     | metadata1                                                       | metadata2 |
-|-----| ---------------------|-----------|---------|------|-----------|-------------------------------------------------------------------------------------------|-----------|------------------------------------------------|-----------------------------------------------------------------|-----------|
-|   0 | CenteredInstructions | 0.000     | 14.055  |      |           | Welcome to this study!                                                                    |           |                                                |                                                                 |           |
-|   1 | SubjectIDPage        | 14.070    | 18.509  |      |           |                                                                                           | subject01 |                                                |                                                                 |           |
-|   2 | ReadingTrial         | 40.271    | 43.455  | 1    | b         | While Bill hunted the deer that was brown and nimble was hunted by Bill.                  |           | `20240912_082813_ReadingTrial_001_b.png`       | 77,704,221,761;239,704,355,761;373,704,545,761;563,704,651,761; |           |
-|   3 | YesNoQuestionTrial   | 43.470    | 48.545  | 1    | b         | Did Bill hunt the deer?                                                                   | no        | `20240912_082813_YesNoQuestionTrial_001_b.png` |                                                                 |           |
-|   4 | ReadingTrial         | 48.560    | 52.726  | 21   | filler    | No head injury is too trivial to be ignored.                                              |           | `20240912_082813_ReadingTrial_021_filler.png`  | 77,704,137,761;155,704,271,761;289,704,461,761;479,704,539,761; |           |
-|   5 | ReadingTrial         | 53.390    | 55.383  | 3    | b         | Anna studied with the chef of the aristocrats who was routinely letting food go to waste. |           | `20240912_082813_ReadingTrial_003_b.png`       | 77,704,193,761;211,704,411,761;429,704,545,761;563,704,651,761; |           |
-|   6 | YesNoQuestionTrial   | 55.396    | 56.436  | 3    | b         | Did food go to waste?                                                                     | no        | `20240912_082813_YesNoQuestionTrial_003_b.png` |                                                                 |           |
-|   7 | ReadingTrial         | 56.451    | 58.252  | 20   | filler    | Colorless green ideas sleep furiously.                                                    |           | `20240912_082813_ReadingTrial_020_filler.png`  | 77,704,333,761;351,704,495,761;513,704,657,761;675,704,819,761; |           |
-|   8 | ReadingTrial         | 59.073    | 60.640  | 2    | a         | While Mary bathed the baby bathed Mary.                                                   |           | `20240912_082813_ReadingTrial_002_a.png`       | 77,704,221,761;239,704,355,761;373,704,545,761;563,704,651,761; |           |
-|   9 | CenteredInstructions | 60.655    | 66.013  |      |           | Thank you for your participation!                                                         |           |                                                |                                                                 |           |
+`data/logs/<prefix>_pixel-codes.tsv` decodes the condition stamped into the
+eye data's `DigitalOut` column (`DigitalOut >> 16 & 0xFF`).
 
-Note that each column contains only one type of data.  This makes it easy to work with this format: just `read.csv` the results file in R and you’re ready to go.
+## Ending a reading trial
 
-Columns:
+1. **Looking at the lower-right corner** (the normal way; region size
+   `TRIGGER_RADIUS`, or per trial `TPxReadingTrial(..., trigger_radius=0.25)`).
+2. **Space** — fallback when calibration is poor, and the way in dry run.
+3. **Escape** aborts the trial (logged as `ABORTED`).
+4. **Ctrl+Q** aborts the experiment; the log so far is saved.
 
-1. `pno`: The number of the page in the sequence of all pages.
-2. `type`: The type of page that was displayed (or “Message” which appears only in the results file, not on screen during the experiment).
-3. `starttime`: The time at which the page was displayed, in seconds with precision down to milliseconds.  The clock starts at the beginning of the experiment (`0.000`).
-4. `endtime`: The time at which the page was left.
-5. `item`: The item number of the displayed stimulus (if any).
-6. `condition`: The condition of the displayed stimulus (if any).
-7. `stimulus`: The displayed stimulus (if any).  Could also be the instructions that were displayed (potentially abbreviated).
-8. `response`: The response (if any).
-9. `screenshot`: Filename of screenshot of the page if a stimulus was displayed.
-10. `metadata1`: Meta data depending on page type.  For ReadingTrials, this column contains the screen coordinates of the AOIs.
-11. `metadata2`: More meta data depending on page type.  For TPxReadingTrials, this column contains the file name of the recorded eye-tracking data.
+On instruction and break screens, **r** suspends the experiment for a
+recalibration in LabMaestro. Experimenter keys are never shown on screen.
 
-The data format of the eye-tracking data depends on the eye-tracker and the user will have to take care of combining Chamois data from the session log (above) with the eye-tracking data.  Initial support for TRACKPixx3 eye-trackers is included in this repository (see [demo_experiment_tpx.py](https://github.com/tmalsburg/chamois/blob/main/demo_experiment_tpx.py)).
+## Screenshots
 
-## Details on individual page types
+Participant ID:
+![Participant ID entry](images/screenshot_1.png)
 
-### `ReadingTrial` and `TPxReadingTrials`
-There are 4 ways to end a TPxReadingTrial (with eye-tracking):
-1. Looking at the lower right corner of the screen is the normal way to end a TPxReadingTrial.  The trigger region is a circle around the corner that has a radius of 200 pixels by default.  The radius can be adjusted using the `trigger_radius` parameter of the constructor of TPxReadingTrial, e.g: `TPxReadingTrial(item, condition, sentence, tpx, trigger_radius=250)`
-2. Alternatively the trial can be ended by pressing space bar.  This can be a plan B when the calibration is so poor that looking at the corner doesn’t work.
-3. Pressing escape aborts the trial.  In this case, the response field in the session log will show `ABORTED`.  This is useful in cases such as when the participant was distracted.  Note that a comprehension question for this trial may still be shown.  In this case, the participant can give a random response.
-4. It’s always an option to just close the window which aborts the whole experiment and stores the session log so far.
+Instructions:
+![Welcome screen](images/screenshot_2.png)
 
-`ReadingTrial` (no eye-tracking) supports options 2–4 in the above list.
+Blinking fixation cross at the start of a reading trial:
+![Fixation cross](images/screenshot_3.png)
 
-### `Next` and `TPxNext`
+Reading trial (the cross in the lower-right corner is the look target that
+ends the trial):
+![Reading trial](images/screenshot_4.png)
 
-These page types can be used between trials to give participants a chance to take a break and, in the case of `TPxNext`, to give the experimenter a chance to recalibrate the eye-tracker (press `r` key).
+Comprehension question:
+![Yes/no question](images/screenshot_5.png)
 
+Break between trials:
+![Break screen](images/screenshot_6.png)
