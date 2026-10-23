@@ -14,10 +14,10 @@ ExperimentApp owns the fullscreen window, a 60 Hz tick, the progress
 bar and the page sequence. Every frame is first rendered into an
 offscreen framebuffer (which is also where the screenshots are taken
 from) and then put on screen by present(). Hardware layers subclass
-the app and override draw_overlay(), present() and tick(); see TPx.py.
-This file itself knows nothing about VPixx hardware.
+the app and override draw_overlay(), present() and tick(); see TPx.py
+and EyeLink.py. This file itself knows nothing about eye trackers.
 
-The file you actually run is demo_experiment_tpx.py.
+The file you actually run is demo_experiment.py.
 """
 
 import csv
@@ -383,8 +383,9 @@ class Page:
 
 class Instructions(Page):
     """A static page that advances on space. Also the class the hidden
-    recalibration key looks for: TPx.py accepts 'r' only while an
-    Instructions page (or a subclass, like the break screens) is up."""
+    recalibration key looks for: TPx.py and EyeLink.py accept 'r' only
+    while an Instructions page (or a subclass, like the break screens)
+    is up."""
 
     def on_key(self, app, symbol, modifiers):
         if symbol == pkey.SPACE:

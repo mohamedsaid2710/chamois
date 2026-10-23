@@ -70,7 +70,7 @@ except ImportError:
     sys.exit(
         "pypixxlib is not installed. Run setup_once.py once (python3 on "
         "Linux/macOS, python on Windows), then start the experiment with "
-        "`uv run demo_experiment_tpx.py`."
+        "`uv run demo_experiment.py`."
     )
 
 import chamois
@@ -913,3 +913,8 @@ class TPxExperimentApp(chamois.ExperimentApp):
     def on_text(self, text):
         if not self.recalibrating:
             super().on_text(text)
+
+
+# The names the experiment script uses, the same in EyeLink.py:
+ReadingTrial = TPxReadingTrial
+ExperimentApp = TPxExperimentApp

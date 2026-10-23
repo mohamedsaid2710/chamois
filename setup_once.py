@@ -18,19 +18,20 @@ It does four things:
      streams that installer (~290 MB) and extracts just the pypixxlib
      tarball from it — the installer is only read as an archive, never
      installed or run, so this works on all three platforms.
-  3. Installs the experiment's dependencies (pyglet, numpy, and the
-     vendored pypixxlib) into the environment that `uv run` uses.
+  3. Installs the experiment's dependencies (pyglet, numpy, the
+     vendored pypixxlib, and SR Research's pylink) into the environment
+     that `uv run` uses.
   4. Deletes itself when everything worked.
 
 After that, running the experiment is always just:
 
-    uv run demo_experiment_tpx.py
+    uv run demo_experiment.py
 
 No virtual environment ever needs to be activated: `uv run` reads the
 header of the experiment script and finds the right environment on
 its own.
 
-The three module files (chamois.py, TPx.py, demo_experiment_tpx.py)
+The module files (chamois.py, TPx.py, EyeLink.py, demo_experiment.py)
 have to sit in the same folder as this script, and the machine needs
 internet access.
 """
@@ -42,7 +43,7 @@ import sys
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TARGET = os.path.join(HERE, "demo_experiment_tpx.py")
+TARGET = os.path.join(HERE, "demo_experiment.py")
 VENDOR_DIR = os.path.join(HERE, "vendor")
 TARBALL_NAME = "pypixxlib-1.12.1.tar.gz"
 VENDORED = os.path.join(VENDOR_DIR, TARBALL_NAME)
@@ -281,11 +282,12 @@ def check_offline_start(uv):
 
 
 def main():
-    # The three module files must already be here; only the tarball can
-    # be fetched.
-    for path, what in [(TARGET, "demo_experiment_tpx.py"),
+    # The module files must already be here; only the tarball can be
+    # fetched.
+    for path, what in [(TARGET, "demo_experiment.py"),
                        (os.path.join(HERE, "chamois.py"), "chamois.py"),
-                       (os.path.join(HERE, "TPx.py"), "TPx.py")]:
+                       (os.path.join(HERE, "TPx.py"), "TPx.py"),
+                       (os.path.join(HERE, "EyeLink.py"), "EyeLink.py")]:
         if not os.path.exists(path):
             fail(f"{what} not found next to setup_once.py — copy the whole "
                  "folder to this machine.")
@@ -301,7 +303,7 @@ def main():
 
     get_tarball(uv)
 
-    print("Installing all dependencies (pyglet, numpy, vendored pypixxlib)...")
+    print("Installing all dependencies (pyglet, numpy, vendored pypixxlib, pylink)...")
     if subprocess.run([uv, "sync", "--script", TARGET], cwd=HERE).returncode != 0:
         fail("dependency installation failed (see the error above; is the "
              "internet reachable?).")
@@ -319,7 +321,7 @@ def main():
               "the machine back in to update or add a dependency.)")
     print("\n" + "=" * 60)
     print("ALL SET. From now on, run the experiment with:")
-    print("\n    uv run demo_experiment_tpx.py\n")
+    print("\n    uv run demo_experiment.py\n")
     if not shutil.which("uv"):
         # uv was installed a moment ago: future terminals will find it
         # (the installer takes care of PATH), only this one does not yet.

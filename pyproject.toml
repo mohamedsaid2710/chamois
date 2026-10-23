@@ -8,10 +8,11 @@ dependencies = [
     "pyglet>=2.0",
     "numpy",
     "pypixxlib",
+    "sr-research-pylink",
 ]
 
 # pypixxlib is proprietary VPixx software, not on PyPI: the tarball is
 # placed in vendor/ by setup_once.py (gitignored, not redistributed). Same source as the PEP 723 header
-# in demo_experiment_tpx.py, which is what `uv run` actually uses.
+# in demo_experiment.py, which is what `uv run` actually uses.
 [tool.uv.sources]
 pypixxlib = { path = "vendor/pypixxlib-1.12.1.tar.gz" }

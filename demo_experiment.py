@@ -1,17 +1,24 @@
 # /// script
 # requires-python = ">=3.9"
-# dependencies = ["pyglet>=2.0", "numpy", "pypixxlib"]
+# dependencies = ["pyglet>=2.0", "numpy", "pypixxlib", "sr-research-pylink"]
 #
 # [tool.uv.sources]
 # pypixxlib = { path = "vendor/pypixxlib-1.12.1.tar.gz" }
 # ///
-"""A reading experiment for the TRACKPixx3/DATAPixx3, written in pure
-Pyglet. This is the file you run; the machinery sits next to it, one
-job per file:
+"""A reading experiment with eye-tracking, written in pure Pyglet.
+This is the file you run; the machinery sits next to it, one job per
+file:
 
     chamois.py   the engine (pages, log, layout, Latin square);
-                 knows nothing about the hardware
-    TPx.py       the VPixx layer (M16 shader, gaze, recording)
+                 knows nothing about eye trackers
+    TPx.py       the VPixx TRACKPixx3/DATAPixx3 layer (M16 shader, gaze,
+                 recording)
+    EyeLink.py   the SR Research EyeLink layer (calibration, gaze,
+                 recording, EDF)
+
+Which tracker is used is set with EYETRACKER below: 'trackpixx',
+'eyelink', or 'none' for a plain reading experiment without
+eye-tracking.
 
 Flow: participant ID, welcome screen, practice sentences, the
 Latin-square-balanced experimental trials with comprehension questions
@@ -20,10 +27,12 @@ session log; every reading trial additionally saves an eye-tracking
 CSV and a screenshot. Everything lands in data/.
 
 How to run
-    1. Calibrate the tracker in LabMaestro. This script never
-       calibrates on its own; it only warns at startup if no
-       calibration exists.
-    2. uv run demo_experiment_tpx.py
+    1. TRACKPixx: calibrate in LabMaestro first; with this tracker the
+       script never calibrates on its own, it only warns at startup if
+       no calibration exists. EyeLink: calibration is part of the
+       experiment, right after the participant ID (run from the Host
+       PC; Escape there continues with the experiment).
+    2. uv run demo_experiment.py
        (first time on a new machine: python3 setup_once.py)
 
 Stimuli
@@ -35,10 +44,11 @@ Stimuli
     be tested without any files.
 
 No tracker?
-    Without a connected DATAPixx3 the experiment runs in dry-run mode:
-    normal (non-M16) display, no gaze markers, eye-tracking CSVs with
-    only a header row, and reading trials end with space — so it also
-    works as a plain reading experiment without eye-tracking. For
+    Without a connected DATAPixx3 (or a reachable EyeLink Host PC) the
+    experiment runs in dry-run mode: normal (non-M16) display, no gaze
+    markers, eye-tracking CSVs with only a header row, and reading
+    trials end with space. EYETRACKER = 'none' runs the same experiment
+    without any eye-tracking code at all. For
     debugging the trial tagging, TPx.SHOW_DRY_RUN_TAG = True draws a
     visible stand-in for the (by design invisible) pixel-mode tag: a
     blue swatch with the condition code in the top left corner.
@@ -48,25 +58,48 @@ Keys (experimenter keys are deliberately not shown on screen)
             trigger fails)
     f / j   answer a comprehension question with no / yes
     r       on instruction and break screens: recalibrate mid-session.
-            The window minimizes and normal video mode is restored;
-            recalibrate in LabMaestro, return to the experiment
-            window, press space to bring the display back, then space
-            again to continue.
+            TRACKPixx: the window minimizes and normal video mode is
+            restored; recalibrate in LabMaestro, return to the
+            experiment window, press space to bring the display back,
+            then space again to continue. EyeLink: the calibration
+            screen opens, as at the start.
     Escape  abort the current reading trial (logged as ABORTED)
     Ctrl+Q  abort the whole experiment (a partial log is saved)
 
     Reading trials normally end on their own, when the participant
     looks at the lower right corner for a moment (see
-    TPx.TRIGGER_RADIUS and TPx.TRIGGER_DWELL).
+    TRIGGER_RADIUS and TRIGGER_DWELL in TPx.py / EyeLink.py).
 """
 
 import os
 import random
 import sys
+from types import SimpleNamespace
 
-#import chamois & TPx modules 
 import chamois
-import TPx
+
+# --------------------------------------------------------------------
+# The eye tracker: 'trackpixx' (VPixx TRACKPixx3/DATAPixx3), 'eyelink'
+# (SR Research EyeLink) or 'none' (no eye-tracking). Only the chosen
+# tracker's module is loaded.
+# --------------------------------------------------------------------
+EYETRACKER = 'trackpixx'
+
+if EYETRACKER == 'trackpixx':
+    import TPx as tracker
+elif EYETRACKER == 'eyelink':
+    import EyeLink as tracker
+elif EYETRACKER == 'none':
+    # The plain engine, with do-nothing stand-ins for the tracker setup:
+    tracker = SimpleNamespace(
+        ReadingTrial=chamois.ReadingTrial,
+        ExperimentApp=chamois.ExperimentApp,
+        assign_pixel_codes=lambda conditions: None,
+        setup_hardware=lambda: None,
+        shutdown_hardware=lambda: None)
+else:
+    sys.exit(f"EYETRACKER must be 'trackpixx', 'eyelink' or 'none', "
+             f"not {EYETRACKER!r}.")
 
 # --------------------------------------------------------------------
 # Stimulus files: targets in stimuli.tsv, fillers in fillers.tsv, next
@@ -126,6 +159,13 @@ WRAP_WIDTH = None       # e.g. 55 wraps to ~55 chars/line; None = off
 WRAP_PRACTICE = False   # auto-wrap practice sentences?
 WRAP_TARGETS = False    # auto-wrap target items (stimuli.tsv)?
 WRAP_FILLERS = True     # auto-wrap fillers (fillers.tsv)?
+
+# Percentage of main-experiment trials (targets and fillers) that are
+# followed by a comprehension question: 0 = none, 100 = every trial.
+# The count is exact (e.g. 30 % of 40 trials = 12 questions for every
+# participant); which trials get one is drawn anew per session.
+# Practice items always get a question.
+QUESTION_PERCENT = 50
 
 # Practice items (multi-line), shown before the main experiment:
 practice_sentences = [
@@ -200,8 +240,8 @@ def load_or_fallback(base_name, fallback, what):
 
 
 # --------------------------------------------------------------------
-# The page sequence. Calibration happens beforehand in LabMaestro; the
-# flow itself never calibrates.
+# The page sequence. With the TRACKPixx, calibration happens beforehand
+# in LabMaestro; with the EyeLink, right after the participant ID.
 # --------------------------------------------------------------------
 def build_pages():
     target_sentences = load_or_fallback(
@@ -217,26 +257,32 @@ def build_pages():
     stimuli = chamois.next_latin_square_list(target_sentences)
     stimuli += fillers
     random.shuffle(stimuli)
-    TPx.assign_pixel_codes(
+    tracker.assign_pixel_codes(
         [row[1] for row in practice] + [row[1] for row in stimuli])
 
     pages = []
     pages.append(chamois.SubjectIDPage())
+    if EYETRACKER == 'eyelink':
+        pages.append(tracker.CalibrationPage())
     pages.append(chamois.CenteredInstructions("Welcome to this study!"))
     pages.append(chamois.CenteredInstructions(
         "We will begin with a few practice sentences."))
     layout = dict(y_offset=Y_OFFSET, align=ALIGN,
                   cross_position=CROSS_POSITION)
     for i, c, s, q in practice:
-        pages.append(TPx.TPxReadingTrial(i, c, s, **layout))
+        pages.append(tracker.ReadingTrial(i, c, s, **layout))
         pages.append(chamois.YesNoQuestionTrial(i, c, q))
         pages.append(chamois.Next())
     pages.append(chamois.CenteredInstructions(
         "Now the main experiment begins. Please concentrate on the "
         "sentences and answer the questions as accurately as possible."))
-    for i, c, s, q in stimuli:
-        pages.append(TPx.TPxReadingTrial(i, c, s, **layout))
-        if random.choice([True, False]):
+    if not 0 <= QUESTION_PERCENT <= 100:
+        raise ValueError(f"QUESTION_PERCENT must be 0–100, not {QUESTION_PERCENT}")
+    n_questions = round(len(stimuli) * QUESTION_PERCENT / 100)
+    asked = set(random.sample(range(len(stimuli)), n_questions))
+    for k, (i, c, s, q) in enumerate(stimuli):
+        pages.append(tracker.ReadingTrial(i, c, s, **layout))
+        if k in asked:
             pages.append(chamois.YesNoQuestionTrial(i, c, q))
         pages.append(chamois.Next())
     pages.append(chamois.CenteredInstructions(
@@ -246,9 +292,9 @@ def build_pages():
 
 def main():
     chamois.new_session()
-    TPx.setup_hardware()
+    tracker.setup_hardware()
     try:
-        app = TPx.TPxExperimentApp(build_pages())
+        app = tracker.ExperimentApp(build_pages())
         try:
             app.run()
         except Exception as e:
@@ -262,7 +308,7 @@ def main():
                 raise
             sys.exit(1)
     finally:
-        TPx.shutdown_hardware()
+        tracker.shutdown_hardware()
 
 
 if __name__ == '__main__':

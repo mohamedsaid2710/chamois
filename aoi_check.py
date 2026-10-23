@@ -47,13 +47,18 @@ def parse_aois(metadata1):
 
 def read_gaze(path):
     """The trial's eye CSV -> ([xL], [yL], [xR], [yR]) in pixels,
-    eye-lost samples dropped. Header-only files (dry-run) come back
-    empty."""
+    eye-lost samples (TRACKPixx 32767, EyeLink -32768) and the empty
+    cells of an unrecorded eye dropped. Header-only files (dry-run) and
+    trials without an eye CSV come back empty."""
     xs_l, ys_l, xs_r, ys_r = [], [], [], []
+    if not path:
+        return xs_l, ys_l, xs_r, ys_r
     with open(path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             for xs, ys, cx, cy in ((xs_l, ys_l, "LeftEyeX", "LeftEyeY"),
                                    (xs_r, ys_r, "RightEyeX", "RightEyeY")):
+                if not row[cx] or not row[cy]:
+                    continue
                 x, y = float(row[cx]), float(row[cy])
                 if abs(x) >= EYE_LOST_SENTINEL or abs(y) >= EYE_LOST_SENTINEL:
                     continue
@@ -80,8 +85,9 @@ def check_trial(row, log_dir, out_dir):
                                edgecolor="deepskyblue", linewidth=0.8))
         ax.annotate(str(i), (left, top - 3), color="deepskyblue", fontsize=7,
                     ha="left", va="bottom")
-    xs_l, ys_l, xs_r, ys_r = read_gaze(os.path.join(log_dir, "..", "..",
-                                                    row["metadata2"]))
+    eye_csv = row["metadata2"]
+    xs_l, ys_l, xs_r, ys_r = read_gaze(
+        os.path.join(log_dir, "..", "..", eye_csv) if eye_csv else None)
     ax.scatter(xs_l, ys_l, s=4, color="cyan", alpha=0.5, label="left eye")
     ax.scatter(xs_r, ys_r, s=4, color="magenta", alpha=0.5,
                label="right eye")
